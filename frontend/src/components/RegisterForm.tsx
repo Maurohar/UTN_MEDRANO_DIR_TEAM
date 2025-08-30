@@ -3,6 +3,7 @@ import Web3 from "web3";
 import { CONTRACT_ABI } from '../abi/ContractABI.js';
 const CONTRACT_ADDRESS = import.meta.env.PUBLIC_CONTRACT_ADDRESS;
 
+
 declare global {
   interface Window {
     ethereum?: {
@@ -17,7 +18,13 @@ export default function RegisterForm() {
   const [nombreAlumno, setNombreAlumno] = useState("");
   const [dniAlumno, setDniAlumno] = useState("");
   const [matriculaAlumno, setMatriculaAlumno] = useState("");
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState("")
+
+  interface Alumno {
+  nombre: string;
+  dni: string;
+  matricula: string;
+  } 
 
   async function registerTitle() {
     if (!universidad || !nombreAlumno || !dniAlumno || !matriculaAlumno) {
@@ -31,20 +38,18 @@ export default function RegisterForm() {
         return;
       }
 
-      const web3 = new Web3(window.ethereum as any);
+      const web3 = new Web3(new Web3.providers.HttpProvider("http://127.0.0.1:8545")); // <<-- importante
+
       const contract = new web3.eth.Contract(CONTRACT_ABI as any, CONTRACT_ADDRESS);
-
-      // Creamos hash del título (puede incluir nombre, DNI, universidad, matrícula)
-      const titleHash = web3.utils.keccak256(
-        universidad + nombreAlumno + dniAlumno + matriculaAlumno
-      );
-
+      
       // Solicitamos cuentas de MetaMask
       const accounts = await window.ethereum.request!({ method: "eth_requestAccounts" });
       const from = accounts[0];
 
-      const tx = await contract.methods.registerTitle(titleHash).send({ from });
-
+      const tx = await contract.methods
+        .registrarAlumno(nombreAlumno, dniAlumno, matriculaAlumno)
+        .send({ from });
+      
       setStatus(`✅ Título registrado! TX: ${tx.transactionHash}`);
     } catch (err: any) {
       console.error(err);
@@ -52,38 +57,34 @@ export default function RegisterForm() {
     }
   }
 
-  async function verifyTitle() {
-    if (!matriculaAlumno) {
-      setStatus("❌ Ingrese matrícula para verificar");
-      return;
-    }
-
-    try {
-      if (!window.ethereum) {
-        setStatus("❌ Necesitas MetaMask para verificar títulos");
-        return;
-      }
-
-      const web3 = new Web3(window.ethereum as any);
-      const contract = new web3.eth.Contract(CONTRACT_ABI as any, CONTRACT_ADDRESS);
-
-      // Generamos el hash con los datos que queremos verificar
-      const titleHash = web3.utils.keccak256(
-        universidad + nombreAlumno + dniAlumno + matriculaAlumno
-      );
-
-      const exists: boolean = await contract.methods.verifyTitle(titleHash).call();
-
-      if (exists) {
-        setStatus(`✅ Título de la matrícula ${matriculaAlumno} registrado`);
-      } else {
-        setStatus(`❌ No se encontró título para la matrícula ${matriculaAlumno}`);
-      }
-    } catch (err: any) {
-      console.error(err);
-      setStatus("❌ Error al verificar en la blockchain");
-    }
+async function verifyTitle() {
+  if (!matriculaAlumno) {
+    setStatus("❌ Ingrese matrícula para verificar");
+    return;
   }
+
+  try {
+    const web3 = new Web3(new Web3.providers.HttpProvider("http://127.0.0.1:8545"));
+    const contract = new web3.eth.Contract(CONTRACT_ABI as any, CONTRACT_ADDRESS);
+
+    // PRIMERO: Verificar que el contrato responda a funciones básicas
+    const universidad = await contract.methods.universidad().call();
+    console.log("Universidad address:", universidad);
+    
+    // SEGUNDO: Intentar la consulta
+    const result: any = await contract.methods.obtenerAlumno(matriculaAlumno).call();
+    console.log("Tipo de resultado:", typeof result);
+    console.log("Resultado completo:", result);
+    
+    setStatus(`✅ Resultado: ${JSON.stringify(result)}`);
+
+  } catch (err: any) {
+    console.error(err);
+    setStatus("❌ Matrícula no encontrada o error del contrato");
+  }
+}
+
+
 
   const containerStyle = {
     display: "flex",
@@ -114,6 +115,8 @@ export default function RegisterForm() {
     border: "none",
     cursor: "pointer"
   };
+
+  
 
   return (
     <div style={containerStyle}>
