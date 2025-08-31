@@ -4,21 +4,12 @@ import { CONTRACT_ABI } from "../abi/ContractABI.js";
 
 const CONTRACT_ADDRESS = import.meta.env.PUBLIC_CONTRACT_ADDRESS;
 
-declare global {
-  interface Window {
-    ethereum?: {
-      request?: (...args: any[]) => Promise<any>;
-      isMetaMask?: boolean;
-    };
-  }
-}
-
 export default function RegisterForm() {
   const [universidad, setUniversidad] = useState("");
   const [nombreAlumno, setNombreAlumno] = useState("");
   const [dniAlumno, setDniAlumno] = useState("");
   const [matriculaAlumno, setMatriculaAlumno] = useState("");
-  const [txHash, setTxHash] = useState("");
+  const [matriculaBuscar, setMatriculaBuscar] = useState("");
   const [status, setStatus] = useState("");
 
   interface Alumno {
@@ -27,149 +18,58 @@ export default function RegisterForm() {
     matricula: string;
   }
 
-  // 🔹 FUNCION: Obtener datos de alumno desde hash de transacción
-  async function getTitleByTxHash(txHash: string) {
-    console.log("🔹 getTitleByTxHash llamada con txHash:", txHash);
-    try {
-      const web3 = new Web3(new Web3.providers.HttpProvider("http://127.0.0.1:8545"));
-      console.log("🔹 Conexión Web3 creada");
-
-      const receipt = await web3.eth.getTransactionReceipt(txHash);
-      console.log("🔹 Receipt obtenido:", receipt);
-
-      if (!receipt) {
-        setStatus("❌ Transacción aún no minada");
-        console.log("❌ Receipt undefined");
-        return;
-      }
-
-      if (!receipt.logs || receipt.logs.length === 0) {
-        setStatus("⚠️ No hay logs en esta transacción");
-        console.log("⚠️ Receipt sin logs");
-        return;
-      }
-
-      const log = receipt.logs[0];
-      console.log("🔹 Primer log del receipt:", log);
-
-      const decoded = web3.eth.abi.decodeLog(
-        [
-          { type: "string", name: "matricula", indexed: false },
-          { type: "string", name: "nombre", indexed: false },
-          { type: "string", name: "dni", indexed: false },
-        ],
-        log.data!,
-        log.topics!
-      );
-
-      console.log("🔹 Evento decodificado:", decoded);
-
-      setStatus(`✅ Alumno: ${decoded.nombre}, DNI: ${decoded.dni}, Matrícula: ${decoded.matricula}`);
-    } catch (err) {
-      console.error("❌ Error en getTitleByTxHash:", err);
-      setStatus("❌ Error buscando transacción");
-    }
-  }
-
-  // 🔹 FUNCION: Registrar alumno en blockchain
+  // 🔹 Registrar alumno apuntando al nodo local
   async function registerTitle() {
-    console.log("🔹 registerTitle llamada");
     if (!universidad || !nombreAlumno || !dniAlumno || !matriculaAlumno) {
       setStatus("❌ Faltan datos");
-      console.log("❌ Datos incompletos:", { universidad, nombreAlumno, dniAlumno, matriculaAlumno });
       return;
     }
 
     try {
-      if (!window.ethereum) {
-        setStatus("❌ Necesitas MetaMask para registrar títulos");
-        console.log("❌ MetaMask no detectado");
-        return;
-      }
-
-      const web3 = new Web3(new Web3.providers.HttpProvider("http://127.0.0.1:8545"));
-      console.log("🔹 Conexión Web3 creada");
-
+      const web3 = new Web3("http://127.0.0.1:8545");
       const contract = new web3.eth.Contract(CONTRACT_ABI as any, CONTRACT_ADDRESS);
-      console.log("🔹 Contrato instanciado:", contract.options.address);
 
-      const accounts = await window.ethereum.request!({ method: "eth_requestAccounts" });
+      // Obtener la primera cuenta del nodo local
+      const accounts = await web3.eth.getAccounts();
       const from = accounts[0];
-      console.log("🔹 Cuenta Ethereum seleccionada:", from);
+      console.log("🔹 Usando cuenta:", from);
 
+      // Enviar transacción
       const tx = await contract.methods
         .registrarAlumno(nombreAlumno, dniAlumno, matriculaAlumno)
         .send({ from });
 
-      console.log("🔹 Transacción enviada:", tx);
-
+      console.log("✅ Transacción enviada:", tx);
       setStatus(`✅ Título registrado! TX: ${tx.transactionHash}`);
     } catch (err: any) {
-      console.error("❌ Error en registerTitle:", err);
-      setStatus("❌ Error al registrar en la blockchain");
+      console.error("❌ Error al registrar título:", err);
+      setStatus("❌ Error al registrar título");
     }
   }
 
-  // 🔹 FUNCION: Obtener datos de alumno desde hash usando evento
-  async function getAlumnoByTxHash(txHash: string) {
-    console.log("🔹 getAlumnoByTxHash llamada con txHash:", txHash);
-
-    if (!txHash) {
-      console.log("❌ Debes pasar un hash de transacción");
+  // 🔹 Obtener alumno directamente por matrícula
+  async function getAlumnoByMatricula(matricula: string) {
+    if (!matricula) {
+      setStatus("❌ Debes ingresar una matrícula");
       return;
     }
 
     try {
-      const web3 = new Web3(window.ethereum as any);
-      console.log("🔹 Conexión Web3 creada");
-
+      const web3 = new Web3("http://127.0.0.1:8545");
       const contract = new web3.eth.Contract(CONTRACT_ABI as any, CONTRACT_ADDRESS);
-      console.log("🔹 Contrato instanciado:", contract.options.address);
 
-      const receipt = await web3.eth.getTransactionReceipt(txHash);
-      console.log("🔹 Receipt obtenido:", receipt);
+      console.log(`🔹 Buscando alumno con matrícula: ${matricula}`);
+      const alumno: Alumno = await contract.methods.obtenerAlumno(matricula).call();
+      console.log("✅ Alumno encontrado:", alumno);
 
-      if (!receipt || !receipt.logs || receipt.logs.length === 0) {
-        console.log("❌ No se encontraron eventos en esta transacción");
-        return;
-      }
-
-      const eventAbi = CONTRACT_ABI.find(
-        (e) => e.name === "TituloRegistrado" && e.type === "event"
-      );
-      console.log("🔹 Event ABI encontrado:", eventAbi);
-
-      if (!eventAbi) {
-        console.log("❌ No se encontró la definición del evento TituloRegistrado");
-        return;
-      }
-
-      const logs = receipt.logs
-        .filter(
-          (log): log is { data: string; topics: string[]; address: string } =>
-            !!log.address && !!log.data && !!log.topics && log.address.toLowerCase() === CONTRACT_ADDRESS.toLowerCase()
-        )
-        .map((log) => {
-          const decoded = web3.eth.abi.decodeLog(eventAbi.inputs, log.data, log.topics.slice(1));
-          console.log("🔹 Log decodificado:", decoded);
-          return decoded;
-        });
-
-      if (logs.length === 0) {
-        console.log("❌ No se encontró el evento TituloRegistrado en la transacción");
-        return;
-      }
-
-      const alumno = logs[0];
-      console.log("🔹 Datos del alumno desde el evento:");
-      console.log("Nombre:", alumno.nombre);
-      console.log("DNI:", alumno.dni);
-      console.log("Matrícula:", alumno.matricula);
+      setStatus(`✅ Alumno: ${alumno.nombre}, DNI: ${alumno.dni}, Matrícula: ${alumno.matricula}`);
     } catch (err: any) {
-      console.error("❌ Error al obtener los datos del alumno por txHash:", err);
+      console.error("❌ Error al obtener alumno:", err);
+      setStatus("❌ Alumno no encontrado o error en la búsqueda");
     }
   }
 
+  // 🔹 Estilos
   const containerStyle = {
     display: "flex",
     flexDirection: "column" as const,
@@ -200,6 +100,7 @@ export default function RegisterForm() {
     cursor: "pointer",
   };
 
+  // 🔹 JSX
   return (
     <div style={containerStyle}>
       <input
@@ -230,7 +131,6 @@ export default function RegisterForm() {
         onChange={(e) => setMatriculaAlumno(e.target.value)}
         style={inputStyle}
       />
-
       <button onClick={registerTitle} style={buttonStyle}>
         Enviar Título
       </button>
@@ -240,13 +140,13 @@ export default function RegisterForm() {
       <section>
         <input
           type="text"
-          placeholder="Ingrese hash de transacción"
-          value={txHash}
-          onChange={(e) => setTxHash(e.target.value)}
+          placeholder="Ingrese matrícula del alumno"
+          value={matriculaBuscar}
+          onChange={(e) => setMatriculaBuscar(e.target.value)}
           style={inputStyle}
         />
-        <button onClick={() => getAlumnoByTxHash(txHash)} style={buttonStyle}>
-          Buscar título por hash
+        <button onClick={() => getAlumnoByMatricula(matriculaBuscar)} style={buttonStyle}>
+          Buscar alumno
         </button>
       </section>
     </div>
