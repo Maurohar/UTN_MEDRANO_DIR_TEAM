@@ -3,7 +3,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import Web3 from 'web3';
-import { CONTRACT_ABI } from '../frontend/orbital-orbit/src/abi/ContractABI.js';
+import { CONTRACT_ABI } from '../frontend/src/abi/ContractABI.js'; // Ajusta la ruta si es necesario
 
 dotenv.config();
 

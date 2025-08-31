@@ -1,6 +1,6 @@
 import Web3 from "web3"; 
 import dotenv from "dotenv";
-import { CONTRACT_ABI } from "../abi/ContractABI.js"; // Ajusta la ruta si es necesario
+import { CONTRACT_ABI } from "../../frontend/src/abi/ContractABI"; // Ajusta la ruta si es necesario
 
 dotenv.config();
 
